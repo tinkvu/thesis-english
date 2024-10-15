@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Language Learning</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            display: flex;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+            background-color: #f4f4f4;
+        }
+        .container {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 300px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            overflow-y: auto;
+            height: 90%;
+            margin-left: 20px;
+        }
+        .input-options {
+            margin: 20px 0;
+        }
+        #recordButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 50%;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100px;
+            height: 100px;
+        }
+        #recordButton.recording {
+            background-color: red;
+        }
+        .hidden {
+            display: none;
+        }
+        .message {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            width: 100%;
+        }
+        .user {
+            justify-content: flex-end;
+        }
+        .assistant {
+            justify-content: flex-start;
+        }
+        .message-content {
+            max-width: 70%;
+            padding: 10px;
+            border-radius: 10px;
+            margin: 5px;
+        }
+        .user .message-content {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+        }
+        .assistant .message-content {
+            background-color: #e9ecef;
+            color: black;
+            margin-right: auto;
+        }
+        .icon {
+            margin-right: 10px;
+        }
+        #loader {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: #007bff;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Engli- The English Language Learning</h1>
+        <div class="input-options">
+            <label for="modelSelect">Selected Model: {{ request.args.get('modelSelect') }}</label>
+            <button id="saveChatHistoryButton">Save Chat History</button> <!-- New button -->
+        </div>
+        <button id="recordButton">Start Recording</button>
+        <div id="recordingContainer" class="hidden">
+            <p>Recording...</p>
+        </div>
+        <div id="responseContainer" class="hidden">
+            <h2>Response:</h2>
+            <audio id="responseAudio" controls></audio>
+        </div>
+        
+    </div>
+    <div class="chat-container">
+        <h2>Chat History</h2>
+        <div id="chatHistory"></div>
+    </div>
+    <script>
+        console.log("JavaScript is running"); // Debug statement
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        document.getElementById('recordButton').addEventListener('click', async function() {
+            if (isRecording) {
+                mediaRecorder.stop();
+                document.getElementById('recordButton').textContent = 'Start Recording';
+                document.getElementById('recordButton').classList.remove('recording'); // Remove recording class
+            } else {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                document.getElementById('recordButton').textContent = 'Stop Recording';
+                //document.getElementById('recordButton').classList.add('recording'); // Add recording class
+                audioChunks = []; // Reset audio chunks
+
+                mediaRecorder.ondataavailable = function(event) {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = function() {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    //document.getElementById('loader').classList.remove('hidden'); // Show loader
+                    sendAudioToServer(audioBlob);
+                };
+            }
+            isRecording = !isRecording; // Toggle recording state
+        });
+
+        function sendAudioToServer(audioBlob) {
+            const formData = new FormData();
+            formData.append('voice', audioBlob, 'recording.wav');
+
+            fetch('/process_voice', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json(); // Change to JSON to get the response text
+            })
+            .then(data => {
+                const audioUrl = 'data:audio/wav;base64,' + data.audioBlob; // Create a URL from the base64 string
+                const audioElement = document.getElementById('responseAudio');
+                audioElement.src = audioUrl;
+                audioElement.playbackRate = 1.25;  // Set playback speed to 1.5x
+                audioElement.play();  // Automatically play the audio
+                document.getElementById('responseContainer').classList.remove('hidden');
+
+                // Update chat history with user input and assistant response
+                updateChatHistory(data.userInput, true); // Show user input
+                updateChatHistory(data.assistantResponse, false, data.translatedResponse); // Show assistant response and translation
+
+                document.getElementById('loader').classList.add('hidden'); // Hide loader
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function updateChatHistory(message, isUser, translatedMessage = '') {
+            const chatHistory = document.getElementById('chatHistory');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message ' + (isUser ? 'user' : 'assistant');
+
+            // Create message content element
+            const contentElement = document.createElement('div');
+            contentElement.className = 'message-content';
+            contentElement.innerHTML = message; // Use innerHTML to allow HTML formatting
+
+            // Create translated content element if available
+            if (translatedMessage) {
+                const translatedElement = document.createElement('div');
+                translatedElement.className = 'message-content';
+                translatedElement.innerHTML = `<i>Translated: ${translatedMessage}</i>`; // Display translated message
+                messageElement.appendChild(translatedElement);
+            }
+
+            // Create icon element
+            const iconElement = document.createElement('i');
+            iconElement.className = 'icon ' + (isUser ? 'fas fa-user' : 'fas fa-robot'); // User and assistant icons
+
+            // Append content first, then icon for user messages
+            if (isUser) {
+                messageElement.appendChild(contentElement);
+                messageElement.appendChild(iconElement);
+            } else {
+                messageElement.appendChild(iconElement);
+                messageElement.appendChild(contentElement);
+            }
+
+            chatHistory.appendChild(messageElement);
+            chatHistory.scrollTop = chatHistory.scrollHeight; // Scroll to the bottom
+        }
+
+        document.getElementById('saveChatHistoryButton').addEventListener('click', function() {
+            const selectedModel = document.getElementById('modelSelect').value; // Get selected model
+
+            fetch('/save_chat_history', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ modelSelect: selectedModel }) // Send selected model
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert(data.message); // Show success message
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
