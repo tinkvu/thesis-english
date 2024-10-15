@@ -224,5 +224,10 @@ def save_chat_history():
     save_chat_history_to_spreadsheet(chat_history, selected_model)  # Save chat history
     return jsonify({"message": "Chat history saved successfully!"})
 
+# Add this function to handle Vercel serverless function
+def handler(event, context):
+    with app.app_context():
+        return app(event, context)
+
 if __name__ == '__main__':
     app.run(debug=True)
