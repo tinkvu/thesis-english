@@ -13,11 +13,13 @@ import requests  # Add this import at the top of your file
 import pandas as pd
 import json  # Import json to format chat history
 from googletrans import Translator  # Add this import
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 app = Flask(__name__)
 #deepgram = Deepgram()
-client = Groq(api_key="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")
-
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 #whisper_model = Whisper()  # Initialize the Whisper model
     # Initial chat history
 chat_history = [
@@ -188,7 +190,7 @@ def process_voice():
     })
 
 # Local spreadsheet setup
-SPREADSHEET_PATH = 'static\chat_history.xlsx'  # Path to your local spreadsheet
+SPREADSHEET_PATH = os.getenv("SPREADSHEET_PATH")  # Path to your local spreadsheet
 
 def save_chat_history_to_spreadsheet(chat_history, selected_model):
     """Save the entire chat history to a local Excel spreadsheet."""
